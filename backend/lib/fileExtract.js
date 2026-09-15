@@ -32,8 +32,20 @@ function extractFromXlsx(buffer) {
   return parts.join('\n\n').trim();
 }
 
+function unescapeXml(str) {
+  return str
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&'); // must be last
+}
+
 // .pptx is a zip of XML files; the visible text on each slide lives inside
-// <a:t> tags in ppt/slides/slideN.xml.
+// <a:t> tags, grouped into paragraphs <a:p> (each paragraph is usually one
+// bullet point). We keep paragraph boundaries as newlines so bullet lists
+// don't get glued into one giant run-on blob, and decode XML entities
+// (&lt; &gt; etc.) back into normal characters.
 async function extractFromPptx(buffer) {
   const zip = await JSZip.loadAsync(buffer);
   const slideFiles = Object.keys(zip.files)
@@ -47,10 +59,20 @@ async function extractFromPptx(buffer) {
   const slides = [];
   for (const fileName of slideFiles) {
     const xml = await zip.files[fileName].async('string');
-    const texts = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]);
-    if (texts.length) slides.push(texts.join(' '));
+    const paragraphXmlBlocks = xml.match(/<a:p>[\s\S]*?<\/a:p>/g) || [];
+    const paragraphs = paragraphXmlBlocks
+      .map((p) => {
+        const texts = [...p.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => unescapeXml(m[1]));
+        return texts.join('').trim();
+      })
+      .filter(Boolean);
+    if (paragraphs.length) slides.push(paragraphs);
   }
-  return slides.map((s, i) => `Slide ${i + 1}: ${s}`).join('\n\n').trim();
+
+  return slides
+    .map((paragraphs, i) => `Slide ${i + 1}:\n${paragraphs.join('\n')}`)
+    .join('\n\n')
+    .trim();
 }
 
 function extractFromPlainText(buffer) {

@@ -24,9 +24,25 @@ const NAV = [
 
 export default function App() {
   const [mode, setMode] = useState('demo');
+  const [backendStatus, setBackendStatus] = useState('checking'); // 'checking' | 'ok' | 'waking'
 
   useEffect(() => {
-    api.getMode().then((r) => setMode(r.mode)).catch(() => setMode('demo'));
+    let cancelled = false;
+
+    function ping() {
+      api.getMode()
+        .then((r) => { if (!cancelled) { setMode(r.mode); setBackendStatus('ok'); } })
+        .catch(() => { if (!cancelled) setBackendStatus('waking'); });
+    }
+
+    // Free hosting tiers (e.g. Render's free plan) spin the backend down after
+    // ~15 minutes idle, so the very first request after a while can take
+    // 30-60s to "wake up". Pinging right away starts that wake-up early,
+    // and re-pinging periodically keeps it awake during an active session.
+    ping();
+    const keepAlive = setInterval(ping, 8 * 60 * 1000); // every 8 minutes
+
+    return () => { cancelled = true; clearInterval(keepAlive); };
   }, []);
 
   return (
@@ -53,6 +69,13 @@ export default function App() {
       </nav>
 
       <main className="main">
+        {backendStatus === 'waking' && (
+          <div className="card" style={{ marginBottom: 20, background: 'var(--accent-soft)', borderColor: 'var(--accent)' }}>
+            <p style={{ margin: 0, fontSize: '0.88rem' }}>
+              ⏳ Waking up the server — this can take up to a minute on a free hosting tier after it's been idle. Things will work normally once it responds; feel free to try again in a moment.
+            </p>
+          </div>
+        )}
         <Routes>
           <Route path="/" element={<Welcome />} />
           <Route path="/methods" element={<MethodSelect />} />

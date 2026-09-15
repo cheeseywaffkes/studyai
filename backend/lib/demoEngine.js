@@ -23,17 +23,43 @@ function getSampleMaterial() {
 // Very simple sentence-extraction heuristic for arbitrary pasted text.
 // Not a real summarizer — just enough to keep the app "working" outside
 // the curated sample notes, per the prototype brief.
-function extractGenericConcepts(text) {
-  // Split on Latin (.!?) as well as CJK (。！？) terminal punctuation so
-  // Korean/Japanese/Chinese sentences are recognised too.
-  const sentences = text
+const MAX_CHUNK_LENGTH = 260;
+
+function splitLongLine(line) {
+  // For a line/paragraph that's still too long (e.g. a run-on sentence with
+  // no bullet breaks), fall back to splitting on sentence-ending punctuation.
+  const sentences = line
     .split(/(?<=[.!?。！？])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 12); // shorter threshold: non-Latin scripts pack more meaning per character
+    .filter(Boolean);
+  if (sentences.length > 1) return sentences;
+  // Still one giant piece — hard-cap it so a single card never displays a wall of text.
+  if (line.length > MAX_CHUNK_LENGTH) return [line.slice(0, MAX_CHUNK_LENGTH).trim() + '…'];
+  return [line];
+}
 
-  const chunks = sentences.slice(0, 5);
+function extractGenericConcepts(text) {
+  // Split on real line breaks first — this respects bullet points, slide
+  // boundaries, and paragraphs, which plain sentence-splitting misses
+  // entirely (a bullet list with no periods would otherwise all merge into
+  // one giant "sentence").
+  const rawLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  return chunks.map((s, i) => ({
+  const chunks = [];
+  for (const line of rawLines) {
+    // Skip bare headers/labels like "Slide 3:" with nothing else on the line.
+    if (/^(slide|sheet)\s*\d*:?$/i.test(line)) continue;
+    if (line.length < 12) continue; // too short to be a meaningful concept
+    if (line.length > MAX_CHUNK_LENGTH) {
+      chunks.push(...splitLongLine(line));
+    } else {
+      chunks.push(line);
+    }
+  }
+
+  const picked = chunks.slice(0, 5);
+
+  return picked.map((s, i) => ({
     id: `generic-${i}`,
     name: `Key idea ${i + 1}`,
     icon: '📝',

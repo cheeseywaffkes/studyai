@@ -53,7 +53,7 @@ export default function AITutor() {
           {chat.map((m, i) => (
             <div key={i} className={'msg ' + (m.role === 'user' ? 'user' : 'ai')}>{m.text}</div>
           ))}
-          {loading && <div className="msg ai">Thinking…</div>}
+          {loading && <div className="msg ai">Thinking… (if the server's been idle, this can take up to a minute to wake up)</div>}
         </div>
         <div className="chat-input-row">
           <input
