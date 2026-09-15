@@ -1,19 +1,9 @@
 // frontend/src/lib/api.js — every call the frontend makes to the backend.
 
-async function request(path, options = {}) {
-   const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-   async function request(path, options = {}) {
-     const res = await fetch(`${BASE_URL}${path}`, {
-       headers: { 'Content-Type': 'application/json' },
-       ...options,
-     });
-     if (!res.ok) {
-       const body = await res.text().catch(() => '');
-       throw new Error(`API ${path} failed (${res.status}): ${body}`);
-     }
-     return res.json();
-   }
+async function request(path, options = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -35,7 +25,7 @@ export const api = {
   uploadPdf: async (file) => {
     const form = new FormData();
     form.append('file', file);
-   const res = await fetch(`${BASE_URL}/upload-pdf`, { method: 'POST', body: form });
+    const res = await fetch(`${BASE_URL}/upload-pdf`, { method: 'POST', body: form });
     if (!res.ok) throw new Error('PDF upload failed');
     return res.json();
   },
