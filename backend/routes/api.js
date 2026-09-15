@@ -7,10 +7,10 @@
 
 const express = require('express');
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
 
 const demoEngine = require('../lib/demoEngine');
 const aiEngine = require('../lib/aiEngine');
+const fileExtract = require('../lib/fileExtract');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -38,17 +38,37 @@ router.post('/upload-notes', (req, res) => {
   res.json({ mode: 'demo', ...demoEngine.buildMaterialFromText(text) });
 });
 
-// POST /api/upload-pdf  (multipart form field "file")
+// POST /api/upload-file  (multipart form field "file")
+// Supports PDF, Word (.docx/.doc), PowerPoint (.pptx), Excel (.xlsx/.xls),
+// CSV, plain text, and Markdown — with UTF-8 decoding throughout so
+// non-Latin scripts (Korean/Hangul, Japanese, Chinese, etc.) come through
+// correctly.
+router.post('/upload-file', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'file is required' });
+  try {
+    const text = await fileExtract.extractText(req.file.buffer, req.file.originalname);
+    if (!text || !text.trim()) throw new Error('No extractable text');
+    res.json({
+      mode: 'demo',
+      fileName: req.file.originalname,
+      ...demoEngine.buildMaterialFromText(text),
+    });
+  } catch (err) {
+    // If extraction fails (unsupported/corrupt/scanned-image file), fall
+    // back to the sample notes so the demo never breaks.
+    res.json({ mode: 'demo', fellBackToSample: true, ...demoEngine.getSampleMaterial() });
+  }
+});
+
+// POST /api/upload-pdf — kept as an alias for backwards compatibility;
+// new code should use /api/upload-file, which handles PDFs too.
 router.post('/upload-pdf', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file is required' });
   try {
-    const parsed = await pdfParse(req.file.buffer);
-    const text = (parsed.text || '').trim();
-    if (!text) throw new Error('No extractable text');
+    const text = await fileExtract.extractText(req.file.buffer, req.file.originalname || 'upload.pdf');
+    if (!text || !text.trim()) throw new Error('No extractable text');
     res.json({ mode: 'demo', ...demoEngine.buildMaterialFromText(text) });
   } catch (err) {
-    // Per the README: if extraction fails, fall back to the sample notes
-    // so the demo never breaks.
     res.json({ mode: 'demo', fellBackToSample: true, ...demoEngine.getSampleMaterial() });
   }
 });

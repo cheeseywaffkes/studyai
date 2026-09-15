@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { api } from '../lib/api.js';
 
+const ACCEPTED_EXTENSIONS = '.pdf,.docx,.doc,.pptx,.xlsx,.xls,.csv,.txt,.md';
+
 export default function UploadNotes() {
   const { setMaterial } = useApp();
   const navigate = useNavigate();
@@ -11,6 +13,7 @@ export default function UploadNotes() {
   const [pasted, setPasted] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fileName, setFileName] = useState(null);
   const fileInput = useRef(null);
 
   function afterMaterialReady() {
@@ -53,17 +56,18 @@ export default function UploadNotes() {
   async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
     setLoading(true);
     setError(null);
     try {
-      const data = await api.uploadPdf(file);
+      const data = await api.uploadFile(file);
       setMaterial(data);
       if (data.fellBackToSample) {
-        setError('Could not extract text from that PDF — using the sample notes instead.');
+        setError(`Could not extract text from "${file.name}" — using the sample notes instead. Scanned/image-only PDFs and some old .doc files can't be read this way.`);
       }
       afterMaterialReady();
     } catch (e) {
-      setError('PDF upload failed. Some scanned or secured PDFs can\'t be text-extracted — try the sample notes.');
+      setError(`Could not upload "${file.name}". Try a different file, or use the sample notes.`);
     } finally {
       setLoading(false);
     }
@@ -73,7 +77,7 @@ export default function UploadNotes() {
     <section>
       <div className="eyebrow">Step 2</div>
       <h2>Add your material</h2>
-      <p className="lede">Use the built-in sample notes for a guaranteed-working demo, or paste / upload your own.</p>
+      <p className="lede">Use the built-in sample notes for a guaranteed-working demo, or paste / upload your own — any language, any of the file types below.</p>
 
       <div className="card stack" style={{ maxWidth: 640 }}>
         <div>
@@ -85,14 +89,18 @@ export default function UploadNotes() {
         <div className="divider" style={{ margin: '6px 0' }}></div>
 
         <div>
-          <label>Upload a PDF</label>
+          <label>Upload a file</label>
+          <p style={{ fontSize: '0.78rem', color: 'var(--ink-soft)', marginTop: -2, marginBottom: 8 }}>
+            Supports PDF, Word (.docx/.doc), PowerPoint (.pptx), Excel (.xlsx/.xls), CSV, plain text, and Markdown — in any language, including Korean (한글).
+          </p>
           <input
             ref={fileInput}
             type="file"
-            accept="application/pdf"
+            accept={ACCEPTED_EXTENSIONS}
             onChange={handleFile}
             disabled={loading}
           />
+          {fileName && !error && <p style={{ fontSize: '0.8rem', color: 'var(--ink-soft)', marginTop: 6 }}>Selected: {fileName}</p>}
         </div>
 
         <div className="divider" style={{ margin: '6px 0' }}></div>
@@ -101,7 +109,7 @@ export default function UploadNotes() {
           <label>Or paste your own notes</label>
           <textarea
             rows={6}
-            placeholder="Paste any study material here…"
+            placeholder="Paste any study material here… (한국어도 지원됩니다)"
             value={pasted}
             onChange={(e) => setPasted(e.target.value)}
           />
@@ -112,6 +120,7 @@ export default function UploadNotes() {
           </button>
         </div>
 
+        {loading && <p style={{ fontSize: '0.85rem', color: 'var(--ink-soft)' }}>Processing…</p>}
         {error && <p style={{ color: 'var(--rust)', fontSize: '0.85rem' }}>{error}</p>}
       </div>
     </section>

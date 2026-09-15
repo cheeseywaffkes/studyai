@@ -22,11 +22,13 @@ export const api = {
   uploadNotes: (text) =>
     request('/upload-notes', { method: 'POST', body: JSON.stringify({ text }) }),
 
-  uploadPdf: async (file) => {
+  // Supports PDF, Word (.docx/.doc), PowerPoint (.pptx), Excel (.xlsx/.xls),
+  // CSV, plain text, and Markdown — any script/language, including Korean.
+  uploadFile: async (file) => {
     const form = new FormData();
     form.append('file', file);
-    const res = await fetch(`${BASE_URL}/upload-pdf`, { method: 'POST', body: form });
-    if (!res.ok) throw new Error('PDF upload failed');
+    const res = await fetch(`${BASE_URL}/upload-file`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error('File upload failed');
     return res.json();
   },
 

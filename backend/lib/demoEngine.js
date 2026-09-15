@@ -24,10 +24,12 @@ function getSampleMaterial() {
 // Not a real summarizer — just enough to keep the app "working" outside
 // the curated sample notes, per the prototype brief.
 function extractGenericConcepts(text) {
+  // Split on Latin (.!?) as well as CJK (。！？) terminal punctuation so
+  // Korean/Japanese/Chinese sentences are recognised too.
   const sentences = text
-    .split(/(?<=[.!?])\s+/)
+    .split(/(?<=[.!?。！？])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 25);
+    .filter((s) => s.length > 12); // shorter threshold: non-Latin scripts pack more meaning per character
 
   const chunks = sentences.slice(0, 5);
 
@@ -39,11 +41,13 @@ function extractGenericConcepts(text) {
     detailed: s,
     analogy: s,
     keyPoints: [s],
+    // \p{L}/\p{N} are Unicode-aware "letter"/"number" classes, so this splits
+    // correctly on Hangul, Latin, or any other script — not just ASCII words.
     keywords: s
       .toLowerCase()
-      .split(/\W+/)
-      .filter((w) => w.length > 5)
-      .slice(0, 6),
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((w) => w.length > 1)
+      .slice(0, 8),
     mcqs: [
       {
         q: 'Which statement appears in your notes?',
@@ -110,8 +114,8 @@ function tutorAnswer(question, material, style) {
     return hit[styleKey] || hit.simple;
   }
 
-  const sentences = (material.text || '').split(/(?<=[.!?])\s+/);
-  const words = lower.split(/\W+/).filter((w) => w.length > 3);
+  const sentences = (material.text || '').split(/(?<=[.!?。！？])\s+/);
+  const words = lower.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1);
   const match = sentences.find((s) => words.some((w) => s.toLowerCase().includes(w)));
 
   if (match) return `From your notes: ${match}`;

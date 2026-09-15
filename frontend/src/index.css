@@ -13,8 +13,8 @@
   --rust: #a6503d;
   --rust-soft: #f1dad3;
   --radius: 6px;
-  --serif: 'Source Serif 4', Georgia, serif;
-  --sans: 'Inter', -apple-system, sans-serif;
+  --serif: 'Source Serif 4', 'Noto Sans KR', Georgia, serif;
+  --sans: 'Inter', 'Noto Sans KR', -apple-system, sans-serif;
 }
 
 * { box-sizing: border-box; }
