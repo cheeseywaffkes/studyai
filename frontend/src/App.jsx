@@ -15,6 +15,7 @@ import Progress from './pages/Progress.jsx';
 const NAV = [
   { to: '/', label: 'Home', icon: '🏠', end: true },
   { to: '/methods', label: 'Study Methods', icon: '🧭' },
+  { to: '/upload', label: 'Upload Notes', icon: '📄' },
   { to: '/profile', label: 'My Study Profile', icon: '✨' },
   { to: '/tutor', label: 'AI Tutor', icon: '💬' },
   { to: '/dashboard', label: 'Dashboard', icon: '📊' },
