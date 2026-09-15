@@ -20,69 +20,197 @@ function getSampleMaterial() {
   };
 }
 
-// Very simple sentence-extraction heuristic for arbitrary pasted text.
-// Not a real summarizer — just enough to keep the app "working" outside
-// the curated sample notes, per the prototype brief.
-const MAX_CHUNK_LENGTH = 260;
+// Very simple sentence-extraction heuristic for arbitrary pasted/uploaded
+// text. Not a real summarizer or LLM — it's rule-based — but it goes beyond
+// "echo the sentence back" by picking a key term out of each sentence and
+// turning it into a genuine fill-in-the-blank flashcard/MCQ with plausible
+// wrong answers, for anything that's mostly Latin-script text. For other
+// scripts (Korean, Japanese, Chinese, etc.) — where safely picking out a
+// single "key word" isn't reliable without real tokenization — it falls
+// back to the simpler "show the statement" style so it never produces
+// garbled or wrong-looking content.
+const MAX_CHUNK_LENGTH = 220;
 
-function splitLongLine(line) {
-  // For a line/paragraph that's still too long (e.g. a run-on sentence with
-  // no bullet breaks), fall back to splitting on sentence-ending punctuation.
-  const sentences = line
+const STOPWORDS = new Set([
+  'the','a','an','of','to','in','on','for','and','or','is','are','was','were','with','as','by',
+  'that','this','it','be','from','at','into','their','its','these','those','can','will','not',
+  'but','if','than','then','so','such','also','which','who','whom','has','have','had','been',
+  'do','does','did','you','your','they','them','he','she','his','her','we','our','i','my',
+  'all','any','more','most','other','some','no','nor','only','own','same','too','very','just',
+  'about','through','during','before','after','above','below','up','down','out','over','under',
+  'again','once','here','there','when','where','why','how','each','both','few','because',
+]);
+
+function isLatinDominant(text) {
+  const letters = text.match(/\p{L}/gu) || [];
+  if (letters.length === 0) return true;
+  const latin = text.match(/[A-Za-z]/g) || [];
+  return latin.length / letters.length > 0.6;
+}
+
+function sentenceSplit(text) {
+  return text
     .split(/(?<=[.!?。！？])\s+/)
     .map((s) => s.trim())
     .filter(Boolean);
-  if (sentences.length > 1) return sentences;
-  // Still one giant piece — hard-cap it so a single card never displays a wall of text.
-  if (line.length > MAX_CHUNK_LENGTH) return [line.slice(0, MAX_CHUNK_LENGTH).trim() + '…'];
-  return [line];
+}
+
+function capLength(s) {
+  return s.length > MAX_CHUNK_LENGTH ? s.slice(0, MAX_CHUNK_LENGTH).trim() + '…' : s;
+}
+
+// Ranks candidate "content-bearing" words in a sentence, best first: prefers
+// capitalized words that aren't sentence-initial (likely proper nouns/
+// acronyms, e.g. "SQLi", "VPN"), then longer non-stopwords. Returns [] if
+// nothing usable is found.
+function pickKeyTerms(sentence) {
+  const words = [...sentence.matchAll(/[A-Za-z][A-Za-z'-]*/g)].map((m) => ({
+    text: m[0],
+    index: m.index,
+  }));
+  if (words.length === 0) return [];
+
+  const candidates = words.filter((w) => w.text.length > 3 && !STOPWORDS.has(w.text.toLowerCase()));
+  if (candidates.length === 0) return [];
+
+  const firstIndex = words[0].index;
+  const scored = candidates.map((w) => {
+    const isMidSentenceCapitalized = w.index !== firstIndex && /^[A-Z]/.test(w.text);
+    return { text: w.text, score: (isMidSentenceCapitalized ? 1000 : 0) + w.text.length };
+  });
+  scored.sort((a, b) => b.score - a.score);
+
+  // De-dupe (case-insensitive) while preserving rank order.
+  const seen = new Set();
+  const ranked = [];
+  for (const c of scored) {
+    const key = c.text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ranked.push(c.text);
+  }
+  return ranked;
+}
+
+function makeBlank(sentence, term) {
+  const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  return sentence.replace(re, '_____');
+}
+
+function deriveTitle(sentence, keyTerm, fallback) {
+  const colonIdx = sentence.indexOf(':');
+  if (colonIdx > 0 && colonIdx < 50) {
+    return sentence.slice(0, colonIdx).trim();
+  }
+  if (keyTerm && keyTerm.length > 3) return keyTerm;
+  const words = sentence.split(/\s+/).slice(0, 5).join(' ');
+  return words.length < sentence.length ? words + '…' : words;
 }
 
 function extractGenericConcepts(text) {
   // Split on real line breaks first — this respects bullet points, slide
-  // boundaries, and paragraphs, which plain sentence-splitting misses
-  // entirely (a bullet list with no periods would otherwise all merge into
-  // one giant "sentence").
+  // boundaries, and paragraphs — then split each line into sentences, so
+  // both "one bullet per line" content (slides) and "one long paragraph"
+  // content (pasted prose) are handled correctly.
   const rawLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  const chunks = [];
+  const rawSentences = [];
   for (const line of rawLines) {
-    // Skip bare headers/labels like "Slide 3:" with nothing else on the line.
-    if (/^(slide|sheet)\s*\d*:?$/i.test(line)) continue;
-    if (line.length < 12) continue; // too short to be a meaningful concept
-    if (line.length > MAX_CHUNK_LENGTH) {
-      chunks.push(...splitLongLine(line));
-    } else {
-      chunks.push(line);
+    if (/^(slide|sheet)\s*\d*:?$/i.test(line)) continue; // bare "Slide 3:" header, nothing else
+    for (const sentence of sentenceSplit(line)) {
+      if (sentence.length < 12) continue; // too short to be meaningful
+      rawSentences.push(capLength(sentence));
     }
   }
 
-  const picked = chunks.slice(0, 5);
+  // De-duplicate near-identical lines (common in messy slide exports).
+  const seen = new Set();
+  const sentences = rawSentences.filter((s) => {
+    const key = s.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
-  return picked.map((s, i) => ({
-    id: `generic-${i}`,
-    name: `Key idea ${i + 1}`,
-    icon: '📝',
-    simple: s,
-    detailed: s,
-    analogy: s,
-    keyPoints: [s],
-    // \p{L}/\p{N} are Unicode-aware "letter"/"number" classes, so this splits
-    // correctly on Hangul, Latin, or any other script — not just ASCII words.
-    keywords: s
+  const picked = sentences.slice(0, 6);
+  const latinMode = isLatinDominant(text);
+
+  // First pass: rank candidate terms per sentence (Latin mode only).
+  const withCandidates = picked.map((s) => ({ sentence: s, candidates: latinMode ? pickKeyTerms(s) : [] }));
+
+  // Assign each sentence a term, preferring one not already used as another
+  // question's answer — keeps a multi-question quiz from repeating the same
+  // correct answer over and over when the material offers other options.
+  const usedTerms = new Set();
+  const withTerms = withCandidates.map(({ sentence, candidates }) => {
+    const fresh = candidates.find((c) => !usedTerms.has(c.toLowerCase()));
+    const term = fresh || candidates[0] || null;
+    if (term) usedTerms.add(term.toLowerCase());
+    return { sentence, term };
+  });
+
+  // Distractor pool draws from every candidate seen anywhere in the
+  // material (not just the ones picked as an answer), for more variety.
+  const termPool = [...new Set(withCandidates.flatMap((w) => w.candidates))];
+
+  return withTerms.map(({ sentence, term }, i) => {
+    const icon = '📝';
+    const id = `generic-${i}`;
+    const keywords = sentence
       .toLowerCase()
       .split(/[^\p{L}\p{N}]+/u)
       .filter((w) => w.length > 1)
-      .slice(0, 8),
-    mcqs: [
-      {
-        q: 'Which statement appears in your notes?',
-        options: [s, 'This was not in your notes.', 'The opposite is true.', 'Not mentioned.'],
-        answer: 0,
-      },
-    ],
-    flashcards: [{ front: `Key idea ${i + 1}`, back: s }],
-  }));
+      .slice(0, 8);
+
+    if (term) {
+      const blanked = makeBlank(sentence, term);
+      const distractorCandidates = termPool.filter((t) => t.toLowerCase() !== term.toLowerCase());
+      const shuffled = distractorCandidates.sort(() => Math.random() - 0.5).slice(0, 3);
+      while (shuffled.length < 3) shuffled.push(['a related term', 'an unrelated term', 'none of these'][shuffled.length]);
+      const options = [term, ...shuffled].sort(() => Math.random() - 0.5);
+
+      return {
+        id,
+        name: deriveTitle(sentence, term),
+        icon,
+        simple: sentence,
+        detailed: sentence,
+        analogy: sentence,
+        keyPoints: [sentence],
+        keywords,
+        mcqs: [
+          {
+            q: `Fill in the blank: "${blanked}"`,
+            options,
+            answer: options.indexOf(term),
+          },
+        ],
+        flashcards: [{ front: blanked, back: sentence }],
+      };
+    }
+
+    // No usable key term (short sentence, non-Latin script, etc.) — fall
+    // back to a straightforward "show the statement" style so nothing
+    // looks broken or nonsensical.
+    return {
+      id,
+      name: deriveTitle(sentence, null, `Key idea ${i + 1}`),
+      icon,
+      simple: sentence,
+      detailed: sentence,
+      analogy: sentence,
+      keyPoints: [sentence],
+      keywords,
+      mcqs: [
+        {
+          q: 'Which statement appears in your notes?',
+          options: [sentence, 'This was not in your notes.', 'The opposite is true.', 'Not mentioned.'],
+          answer: 0,
+        },
+      ],
+      flashcards: [{ front: `Key idea ${i + 1}`, back: sentence }],
+    };
+  });
 }
 
 function buildMaterialFromText(text) {
