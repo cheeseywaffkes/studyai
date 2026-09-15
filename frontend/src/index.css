@@ -164,3 +164,68 @@ label { font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); display: b
 
 .kicker-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
 .empty-state { padding: 40px 20px; text-align: center; color: var(--ink-soft); }
+
+/* ============================================================
+   RESPONSIVE — phone-sized screens
+   ============================================================ */
+@media (max-width: 760px) {
+  .app { flex-direction: column; }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    padding: 10px 8px;
+  }
+  .brand {
+    border-bottom: none;
+    border-right: 1px solid var(--line);
+    padding: 0 14px 0 4px;
+    margin-bottom: 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .brand-sub { display: none; }
+  .nav-group {
+    display: flex;
+    padding: 0 4px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .nav-tab {
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+  }
+  .nav-tab.active { border-left: none; border-bottom-color: var(--accent); }
+
+  .main { padding: 20px 16px 50px 16px; max-width: 100%; }
+
+  .hero { padding: 30px 4px 26px 4px; }
+  .hero h1 { font-size: 1.9rem; }
+
+  .card { padding: 16px; }
+  .row { gap: 10px; }
+
+  .cornell-grid { grid-template-columns: 1fr; }
+  .cornell-cues { border-right: none; border-bottom: 1px solid var(--line); }
+
+  .method-grid, .choice-grid { grid-template-columns: 1fr 1fr; }
+
+  .step-track { overflow-x: auto; padding-bottom: 4px; }
+
+  .chat-log { max-height: 55vh; }
+}
+
+@media (max-width: 420px) {
+  .method-grid, .choice-grid { grid-template-columns: 1fr; }
+  .flip-card { height: 170px; }
+  .timer-display { font-size: 2.3rem; }
+  .leitner-boxes { flex-direction: column; }
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+}
