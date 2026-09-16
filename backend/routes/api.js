@@ -107,21 +107,21 @@ router.post('/score-answer', async (req, res) => {
   res.json({ mode: 'demo', level: score.level, feedback });
 });
 
-// POST /api/tutor  { question, material, style }
+// POST /api/tutor  { question, material, style, reveal, history }
 router.post('/tutor', async (req, res) => {
-  const { question, material, style } = req.body || {};
+  const { question, material, style, reveal, history } = req.body || {};
   if (!question) return res.status(400).json({ error: 'question is required' });
   if (!material) return res.status(400).json({ error: 'material is required' });
 
   if (hasLiveKey()) {
     try {
-      const answer = await aiEngine.tutorAnswerAI(question, material, style);
+      const answer = await aiEngine.tutorAnswerAI(question, material, style, { reveal, history });
       return res.json({ mode: 'live', answer });
     } catch (err) {
       // fall through to demo
     }
   }
-  const answer = demoEngine.tutorAnswer(question, material, style);
+  const answer = demoEngine.tutorAnswer(question, material, style, { reveal });
   res.json({ mode: 'demo', answer });
 });
 

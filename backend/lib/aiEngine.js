@@ -74,16 +74,25 @@ async function scoreAnswerAI(userAnswer, concept) {
   return parsed;
 }
 
-async function tutorAnswerAI(question, material, style) {
+async function tutorAnswerAI(question, material, style, { reveal = false, history = [] } = {}) {
   const context = (material.concepts || [])
     .map((c) => `${c.name}: ${c.detailed}`)
     .join('\n');
-  const instruction = STYLE_PROMPT[style] || STYLE_PROMPT.simple;
+  const styleInstruction = STYLE_PROMPT[style] || STYLE_PROMPT.simple;
+
+  const socraticInstruction = reveal
+    ? 'The student has asked you to reveal the answer (or is stuck) — give the direct, complete answer now, clearly and helpfully.'
+    : 'Act as a Socratic tutor: do NOT give the full answer right away. Instead, respond with a short guiding hint, a leading question, or a partial clue that helps the student reason toward the answer themselves, using the notes as your source of truth. Keep it to 1-3 sentences. If the student\'s message shows they\'re already stuck, frustrated, or explicitly asking for the answer (e.g. "I don\'t know", "just tell me", "give up"), give the full answer instead of another hint.';
+
   const messages = [
     {
       role: 'system',
-      content: `You are an AI study tutor. Answer only using the notes provided below. ${instruction} If the question isn't covered by the notes, say so plainly.\n\nNotes:\n${context}`,
+      content: `You are an AI study tutor. Answer only using the notes provided below — if the question isn't covered by the notes, say so plainly rather than using outside knowledge. ${styleInstruction} ${socraticInstruction}\n\nNotes:\n${context}`,
     },
+    ...history
+      .filter((m) => m && m.text && (m.role === 'user' || m.role === 'ai'))
+      .slice(-6) // keep the prompt small — just enough recent context to judge whether the student is stuck
+      .map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text })),
     { role: 'user', content: question },
   ];
   return callOpenAI(messages, { temperature: 0.5, max_tokens: 300 });

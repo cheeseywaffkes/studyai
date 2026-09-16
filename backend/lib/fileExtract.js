@@ -26,8 +26,26 @@ function extractFromXlsx(buffer) {
   const parts = [];
   workbook.SheetNames.forEach((name) => {
     const sheet = workbook.Sheets[name];
-    const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
-    if (csv.trim()) parts.push(`Sheet: ${name}\n${csv.trim()}`);
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+    if (rows.length === 0) return;
+
+    // A two-column sheet (very common for vocab/glossary lists — "Term,
+    // Definition") reads much better as "Term: Definition" than as raw CSV,
+    // and this format also lets the study-material engine correctly use the
+    // term as the card title instead of treating the whole row as one blob.
+    const isTwoColumn = rows.every((r) => r.length <= 2);
+    const HEADER_WORDS = new Set(['term', 'definition', 'word', 'meaning', 'concept', 'description', 'question', 'answer', 'key', 'value', 'name']);
+    const looksLikeHeaderRow = (r) =>
+      r.length === 2 && r.every((cell) => HEADER_WORDS.has(String(cell).trim().toLowerCase()));
+
+    const dataRows = isTwoColumn && rows.length > 1 && looksLikeHeaderRow(rows[0]) ? rows.slice(1) : rows;
+
+    const lines = dataRows
+      .map((r) => r.map((cell) => String(cell).trim()).filter(Boolean))
+      .filter((r) => r.length > 0)
+      .map((r) => (isTwoColumn && r.length === 2 ? `${r[0]}: ${r[1]}` : r.join(', ')));
+
+    if (lines.length) parts.push(`Sheet: ${name}\n${lines.join('\n')}`);
   });
   return parts.join('\n\n').trim();
 }

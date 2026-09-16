@@ -62,6 +62,6 @@ export const api = {
   scoreAnswer: (concept, answer) =>
     request('/score-answer', { method: 'POST', body: JSON.stringify({ concept, answer }) }),
 
-  tutor: (question, material, style) =>
-    request('/tutor', { method: 'POST', body: JSON.stringify({ question, material, style }) }),
+  tutor: (question, material, style, { reveal, history } = {}) =>
+    request('/tutor', { method: 'POST', body: JSON.stringify({ question, material, style, reveal, history }) }),
 };
