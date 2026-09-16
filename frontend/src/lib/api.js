@@ -9,9 +9,10 @@ function delay(ms) {
 // Free hosting tiers (e.g. Render's free plan) put the backend to sleep
 // after inactivity, so the first request after a while can fail or time out
 // while it wakes up. Rather than surfacing that as an error immediately, we
-// retry a couple of times with a growing delay — most cold starts finish
-// within 30-40s, so this usually recovers silently.
-async function fetchWithRetry(url, options, { retries = 2, retryDelayMs = 6000 } = {}) {
+// retry several times with a growing delay — cold starts can take up to
+// 60s, so the retry window needs real headroom, not just a couple of quick
+// attempts.
+async function fetchWithRetry(url, options, { retries = 5, retryDelayMs = 8000, onRetry } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -21,16 +22,19 @@ async function fetchWithRetry(url, options, { retries = 2, retryDelayMs = 6000 }
     } catch (err) {
       lastError = err;
     }
-    if (attempt < retries) await delay(retryDelayMs);
+    if (attempt < retries) {
+      if (onRetry) onRetry(attempt + 1, retries);
+      await delay(retryDelayMs);
+    }
   }
   throw lastError;
 }
 
-async function request(path, options = {}) {
+async function request(path, options = {}, retryOptions = {}) {
   const res = await fetchWithRetry(`${BASE_URL}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
-  });
+  }, retryOptions);
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`API ${path} failed (${res.status}): ${body}`);
@@ -62,6 +66,6 @@ export const api = {
   scoreAnswer: (concept, answer) =>
     request('/score-answer', { method: 'POST', body: JSON.stringify({ concept, answer }) }),
 
-  tutor: (question, material, style, { reveal, history } = {}) =>
-    request('/tutor', { method: 'POST', body: JSON.stringify({ question, material, style, reveal, history }) }),
+  tutor: (question, material, style, { reveal, history, onRetry } = {}) =>
+    request('/tutor', { method: 'POST', body: JSON.stringify({ question, material, style, reveal, history }) }, { onRetry }),
 };

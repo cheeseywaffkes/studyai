@@ -6,6 +6,7 @@ export default function AITutor() {
   const { material, profile, chat, setChat } = useApp();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingNote, setLoadingNote] = useState(null);
   const [hintMode, setHintMode] = useState(true);
   const logRef = useRef(null);
 
@@ -21,7 +22,7 @@ export default function AITutor() {
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [chat]);
+  }, [chat, loadingNote]);
 
   function recentHistory(list) {
     // A lightweight window of recent turns, so Live Mode can tell whether the
@@ -35,14 +36,18 @@ export default function AITutor() {
       return;
     }
     setLoading(true);
+    setLoadingNote(null);
     try {
       const history = recentHistory(chat);
-      const res = await api.tutor(question, material, profile?.style, { reveal, history });
+      const onRetry = (attempt, total) =>
+        setLoadingNote(`Still waking up the server (attempt ${attempt} of ${total + 1}) — this can take up to a minute on a free hosting tier…`);
+      const res = await api.tutor(question, material, profile?.style, { reveal, history, onRetry });
       setChat((c) => [...c, { role: 'ai', text: res.answer, question, revealed: reveal }]);
     } catch (e) {
-      setChat((c) => [...c, { role: 'ai', text: "Couldn't reach the backend just now — make sure the server is running." }]);
+      setChat((c) => [...c, { role: 'ai', text: "Couldn't reach the backend after several tries — it may be down, or your network/VPN might be blocking it. Try again in a moment, or check that the backend is deployed and running." }]);
     } finally {
       setLoading(false);
+      setLoadingNote(null);
     }
   }
 
@@ -88,7 +93,11 @@ export default function AITutor() {
               )}
             </div>
           ))}
-          {loading && <div className="msg ai">Thinking… (if the server's been idle, this can take up to a minute to wake up)</div>}
+          {loading && (
+            <div className="msg ai">
+              {loadingNote || "Thinking… (if the server's been idle, this can take up to a minute to wake up)"}
+            </div>
+          )}
         </div>
         <div className="chat-input-row">
           <input
